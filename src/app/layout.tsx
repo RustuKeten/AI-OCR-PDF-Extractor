@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "PDF Extractor AI",
+  title: "PDF Extractor",
   description: "Advanced AI-powered PDF data extraction and resume parsing",
   icons: {
     icon: [

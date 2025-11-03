@@ -90,7 +90,7 @@ export function Navigation({
                 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white cursor-pointer"
                 onClick={() => router.push("/")}
               >
-                PDF Extractor AI
+                PDF Extractor
               </h1>
             </div>
 
@@ -128,7 +128,7 @@ export function Navigation({
                 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white cursor-pointer"
                 onClick={() => router.push("/dashboard")}
               >
-                PDF Extractor AI
+                PDF Extractor
               </h1>
             </div>
 
