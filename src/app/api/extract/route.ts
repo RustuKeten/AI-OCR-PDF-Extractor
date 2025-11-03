@@ -1,15 +1,11 @@
 import { NextResponse } from "next/server";
-import OpenAI from "openai";
 import { ResumeData } from "@/types/resume";
 import { createEmptyResumeTemplate } from "@/utils/resumeTemplate";
 import { reorderResumeData } from "@/utils/resumeOrder";
+import { getOpenAI } from "@/lib/openai";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY!,
-});
 
 export async function POST(req: Request) {
   try {
@@ -40,6 +36,7 @@ export async function POST(req: Request) {
     const JSON_TEMPLATE = createEmptyResumeTemplate();
 
     // --- OpenAI API call ---
+    const openai = getOpenAI();
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       response_format: { type: "json_object" },

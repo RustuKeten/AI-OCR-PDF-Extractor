@@ -2,18 +2,15 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import OpenAI from "openai";
 import { ResumeData } from "@/types/resume";
 import { createEmptyResumeTemplate } from "@/utils/resumeTemplate";
 import { reorderResumeData } from "@/utils/resumeOrder";
+import { getOpenAI } from "@/lib/openai";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 const CREDITS_REQUIRED = 100;
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY!,
-});
 
 export async function POST(req: Request) {
   try {
@@ -242,6 +239,7 @@ IMPORTANT: Do not return empty strings or empty arrays unless the information is
 
       // Extract structured data using OpenAI
       // Use gpt-4o for image-based PDFs (has vision support), gpt-4o-mini for text-based
+      const openai = getOpenAI();
       const completion = await openai.chat.completions.create({
         model: isImageBased ? "gpt-4o" : "gpt-4o-mini",
         response_format: { type: "json_object" },
