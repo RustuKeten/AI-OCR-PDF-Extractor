@@ -425,10 +425,41 @@ The application supports three subscription tiers:
 ### Testing Stripe Integration
 
 1. Use Stripe **Test Mode** (never use live mode in development)
-2. Use Stripe test cards:
-   - Success: `4242 4242 4242 4242`
-   - Decline: `4000 0000 0000 0002`
-   - 3D Secure: `4000 0025 0000 3155`
+2. Use Stripe test cards from the [official Stripe documentation](https://docs.stripe.com/testing#cards):
+
+   #### Most Common Test Cards
+
+   | Brand                 | Card Number           | CVC          | Expiry Date     | Description        |
+   | --------------------- | --------------------- | ------------ | --------------- | ------------------ |
+   | Visa                  | `4242 4242 4242 4242` | Any 3 digits | Any future date | Successful payment |
+   | Visa (debit)          | `4000 0566 5556 5556` | Any 3 digits | Any future date | Successful payment |
+   | Mastercard            | `5555 5555 5555 4444` | Any 3 digits | Any future date | Successful payment |
+   | Mastercard (2-series) | `2223 0031 2200 3222` | Any 3 digits | Any future date | Successful payment |
+   | American Express      | `3782 8224 6310 005`  | Any 4 digits | Any future date | Successful payment |
+   | Discover              | `6011 1111 1111 1117` | Any 3 digits | Any future date | Successful payment |
+
+   #### Test Cards for Different Scenarios
+
+   | Card Number           | Scenario           | Description                                 |
+   | --------------------- | ------------------ | ------------------------------------------- |
+   | `4242 4242 4242 4242` | Success            | Payment succeeds                            |
+   | `4000 0000 0000 0002` | Card declined      | Generic decline                             |
+   | `4000 0000 0000 9995` | Insufficient funds | Card has insufficient funds                 |
+   | `4000 0000 0000 0069` | Expired card       | Card has expired                            |
+   | `4000 0000 0000 0127` | Incorrect CVC      | CVC is incorrect                            |
+   | `4000 0000 0000 0119` | Processing error   | An error occurred while processing the card |
+   | `4000 0025 0000 3155` | 3D Secure required | Requires 3D Secure authentication           |
+
+   **How to Use:**
+
+   - Enter the card number in the Stripe Checkout form
+   - Use any future expiry date (e.g., `12/34`)
+   - Use any 3-digit CVC (e.g., `123`) for Visa/Mastercard, or any 4-digit CVC for American Express
+   - Use any valid email address
+   - Use any valid billing address
+
+   > **Note**: For a complete list of test cards including country-specific cards, declined cards, and 3D Secure testing, visit the [Stripe Testing Documentation](https://docs.stripe.com/testing#cards).
+
 3. Test webhooks locally using Stripe CLI:
    ```bash
    stripe listen --forward-to localhost:3002/api/webhooks/stripe
