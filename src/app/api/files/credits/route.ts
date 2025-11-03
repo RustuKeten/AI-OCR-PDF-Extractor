@@ -19,6 +19,7 @@ export async function GET(request: NextRequest) {
       select: {
         credits: true,
         planType: true,
+        subscriptionId: true,
       },
     });
 
@@ -30,6 +31,7 @@ export async function GET(request: NextRequest) {
       success: true,
       credits: user.credits,
       planType: user.planType,
+      hasSubscription: !!user.subscriptionId,
     });
   } catch (error: unknown) {
     console.error("Fetch credits error:", error);

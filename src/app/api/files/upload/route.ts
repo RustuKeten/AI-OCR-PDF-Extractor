@@ -37,10 +37,23 @@ export async function POST(req: Request) {
 
     // Check if user has sufficient credits
     if (user.credits < CREDITS_REQUIRED) {
+      // Get user's plan type for better error message
+      const userWithPlan = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { planType: true },
+      });
+
+      const upgradeMessage =
+        userWithPlan?.planType === "FREE"
+          ? "Please subscribe to a plan to get more credits, or wait for your subscription to renew."
+          : "Please top up your credits or wait for your subscription to renew.";
+
       return NextResponse.json(
         {
           error: "Insufficient credits",
-          message: `You need ${CREDITS_REQUIRED} credits to process a file. You have ${user.credits} credits remaining.`,
+          message: `You need ${CREDITS_REQUIRED} credits to process a file. You have ${user.credits} credits remaining. ${upgradeMessage}`,
+          creditsRemaining: user.credits,
+          creditsRequired: CREDITS_REQUIRED,
         },
         { status: 402 }
       );

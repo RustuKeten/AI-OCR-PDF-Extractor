@@ -111,7 +111,7 @@ export function Navigation({
               <Button
                 variant={currentPage === "settings" ? "default" : "ghost"}
                 size="sm"
-                onClick={() => (window.location.href = "/settings")}
+                onClick={() => router.push("/settings")}
                 className={
                   currentPage === "settings"
                     ? "bg-blue-600 text-white hover:bg-blue-700"

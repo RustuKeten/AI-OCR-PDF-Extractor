@@ -88,16 +88,44 @@ NEXTAUTH_SECRET="your-secret-key-here"
 
 # OpenAI API Key
 OPENAI_API_KEY="your-openai-api-key-here"
+
+# Stripe Configuration (Test Mode)
+# Get these from Stripe Dashboard > Developers > API Keys (use Test mode keys)
+STRIPE_SECRET_KEY="sk_test_your_stripe_secret_key"
+STRIPE_PUBLIC_KEY="pk_test_your_stripe_public_key"
+NEXT_PUBLIC_STRIPE_PUBLIC_KEY="pk_test_your_stripe_public_key"
+STRIPE_WEBHOOK_SECRET="whsec_your_webhook_secret"
+
+# Stripe Price IDs (Test Mode)
+# Create products and prices in Stripe Dashboard > Products
+# Then copy the Price ID (starts with price_...)
+STRIPE_PRICE_BASIC="price_test_basic_monthly_price_id"
+STRIPE_PRICE_PRO="price_test_pro_monthly_price_id"
 ```
 
-### 4. Set Up Supabase Database
+### 4. Set Up Stripe (Optional but Recommended)
+
+1. Create a Stripe account at [stripe.com](https://stripe.com)
+2. Navigate to **Developers** > **API Keys** (make sure you're in **Test Mode**)
+3. Copy your **Publishable key** and **Secret key** (starts with `pk_test_` and `sk_test_`)
+4. Create two products in Stripe Dashboard:
+   - **Basic Plan**: $10/month → Copy the Price ID (starts with `price_`)
+   - **Pro Plan**: $20/month → Copy the Price ID (starts with `price_`)
+5. Set up webhook endpoint:
+   - Go to **Developers** > **Webhooks** > **Add endpoint**
+   - Endpoint URL: `https://your-domain.com/api/webhooks/stripe`
+   - Select events: `invoice.paid`, `customer.subscription.updated`, `customer.subscription.deleted`, `checkout.session.completed`, `customer.subscription.created`
+   - Copy the **Signing secret** (starts with `whsec_`)
+6. Update your `.env.local` file with all Stripe keys
+
+### 5. Set Up Supabase Database
 
 1. Create a new Supabase project at [supabase.com](https://supabase.com)
 2. Navigate to **Settings** > **Database**
 3. Copy the connection string from **Connection string** section (use "URI" format)
 4. Update `DATABASE_URL` in your `.env.local` file
 
-### 5. Run Database Migrations
+### 6. Run Database Migrations
 
 ```bash
 # Generate Prisma Client
@@ -110,7 +138,7 @@ npm run prisma:migrate
 npm run prisma:studio
 ```
 
-### 6. Start Development Server
+### 7. Start Development Server
 
 ```bash
 npm run dev
@@ -337,6 +365,75 @@ The extracted JSON follows this structure (in order):
 - Supports: Light, Dark, System (auto-detect)
 - Preference saved in localStorage
 
+## 💳 Stripe Integration
+
+### Subscription Plans
+
+The application supports three subscription tiers:
+
+| Plan  | Credits | Price     | PDF Extractions |
+| ----- | ------- | --------- | --------------- |
+| FREE  | 1,000   | $0        | ~10             |
+| BASIC | 10,000  | $10/month | ~100            |
+| PRO   | 20,000  | $20/month | ~200            |
+
+### How Credits Work
+
+1. **Credit Cost**: Each successful PDF extraction costs **100 credits**
+2. **Credit Deduction**: Credits are deducted **after** successful extraction (not before)
+3. **Insufficient Credits**: If a user has less than 100 credits, they receive a friendly error message encouraging them to subscribe or wait for subscription renewal
+4. **Monthly Renewal**: When a subscription renews (invoice.paid webhook), credits are automatically added to the user's account
+
+### Subscription Flow
+
+1. **Sign Up**: User creates account (FREE plan with 1,000 credits)
+2. **Subscribe**: User navigates to Settings page and selects a plan
+3. **Checkout**: User is redirected to Stripe Checkout to complete payment
+4. **Webhook Processing**:
+   - `checkout.session.completed` webhook fires
+   - Subscription ID saved to user record
+   - Credits added to account (10,000 for BASIC, 20,000 for PRO)
+   - Plan type updated
+5. **Monthly Renewal**:
+   - `invoice.paid` webhook fires each month
+   - Credits automatically added based on plan
+6. **Upgrade/Downgrade**:
+   - Users can upgrade from BASIC → PRO
+   - Existing subscription is canceled and new one is created
+   - `customer.subscription.updated` webhook updates plan type
+7. **Cancellation**:
+   - Users can cancel via Stripe Customer Portal
+   - `customer.subscription.deleted` webhook resets plan to FREE
+   - Remaining credits are kept
+
+### Webhook Events Handled
+
+| Event                           | Action                                               |
+| ------------------------------- | ---------------------------------------------------- |
+| `checkout.session.completed`    | Activate subscription, add credits, update plan type |
+| `invoice.paid`                  | Add monthly credits on renewal                       |
+| `customer.subscription.updated` | Update plan type when changed                        |
+| `customer.subscription.deleted` | Reset to FREE plan, clear subscription ID            |
+| `customer.subscription.created` | Backup handler for subscription creation             |
+
+### Stripe API Endpoints
+
+- `POST /api/stripe/checkout` - Create Stripe Checkout session for subscription
+- `POST /api/stripe/portal` - Create Stripe Customer Portal session for billing management
+- `POST /api/webhooks/stripe` - Handle Stripe webhook events
+
+### Testing Stripe Integration
+
+1. Use Stripe **Test Mode** (never use live mode in development)
+2. Use Stripe test cards:
+   - Success: `4242 4242 4242 4242`
+   - Decline: `4000 0000 0000 0002`
+   - 3D Secure: `4000 0025 0000 3155`
+3. Test webhooks locally using Stripe CLI:
+   ```bash
+   stripe listen --forward-to localhost:3002/api/webhooks/stripe
+   ```
+
 ## 🐛 Troubleshooting
 
 ### Common Issues
@@ -395,16 +492,48 @@ curl -X POST http://localhost:3002/api/files/upload \
 
 ## 🚢 Deployment
 
+### Vercel Deployment Guide
+
+For detailed deployment instructions, see **[VERCEL_DEPLOYMENT.md](./VERCEL_DEPLOYMENT.md)**.
+
+### Quick Deployment Checklist
+
+1. **Environment Variables** - Set all required variables in Vercel dashboard
+2. **Database** - Run migrations: `npx prisma migrate deploy`
+3. **Stripe Webhook** - Configure endpoint **after deployment**: `https://your-domain.vercel.app/api/webhooks/stripe`
+4. **Stripe Products** - Create products in **Live Mode** and copy Price IDs
+5. **Test** - Verify authentication, PDF upload, and subscription flows
+
 ### Environment Variables for Production
 
-Make sure to set these in your production environment:
+Make sure to set these in your Vercel project settings:
 
 ```env
+# Database
 DATABASE_URL="your-production-database-url"
-NEXTAUTH_URL="https://your-domain.com"
-NEXTAUTH_SECRET="your-production-secret"
+
+# NextAuth
+NEXTAUTH_URL="https://your-domain.vercel.app"
+NEXTAUTH_SECRET="your-production-secret"  # Generate with: openssl rand -base64 32
+
+# OpenAI
 OPENAI_API_KEY="your-openai-api-key"
+
+# Stripe (Live Mode for production)
+STRIPE_SECRET_KEY="sk_live_your_stripe_secret_key"
+STRIPE_PUBLIC_KEY="pk_live_your_stripe_public_key"
+NEXT_PUBLIC_STRIPE_PUBLIC_KEY="pk_live_your_stripe_public_key"
+STRIPE_WEBHOOK_SECRET="whsec_your_production_webhook_secret"
+STRIPE_PRICE_BASIC="price_your_basic_monthly_price_id"
+STRIPE_PRICE_PRO="price_your_pro_monthly_price_id"
 ```
+
+### Important Notes
+
+- ⚠️ **Webhook Endpoint**: Configure Stripe webhook **after deployment** with your Vercel URL
+- ⚠️ **Live Mode**: Use Stripe **Live Mode** keys and Price IDs for production
+- ⚠️ **Database**: Run `npx prisma migrate deploy` before first deployment
+- ⚠️ **HTTPS**: Vercel automatically provides HTTPS (required for webhooks)
 
 ### Build for Production
 
@@ -416,10 +545,10 @@ npm run start
 ### Database Migrations in Production
 
 ```bash
-# Apply migrations
-npm run prisma:migrate
+# Apply migrations to production database
+DATABASE_URL="your-production-database-url" npx prisma migrate deploy
 
-# Generate Prisma Client
+# Generate Prisma Client (done automatically in build)
 npm run prisma:generate
 ```
 
