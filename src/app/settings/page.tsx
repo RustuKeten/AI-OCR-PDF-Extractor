@@ -6,17 +6,17 @@ import { useEffect, useState, Suspense } from "react";
 import { Navigation } from "@/components/navigation";
 import { Footer } from "@/components/footer";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Wallet, CreditCard, Zap, Check, AlertCircle } from "lucide-react";
 import toast from "react-hot-toast";
-
-// Get Stripe public key from environment
-const STRIPE_PUBLIC_KEY =
-  typeof window !== "undefined"
-    ? process.env.NEXT_PUBLIC_STRIPE_PUBLIC_KEY
-    : null;
 
 function SettingsContent() {
   const { data: session, status } = useSession();
@@ -27,6 +27,7 @@ function SettingsContent() {
   const [planType, setPlanType] = useState("FREE");
   const [isProcessing, setIsProcessing] = useState(false);
   const [hasSubscription, setHasSubscription] = useState(false);
+  const [stripePublicKey, setStripePublicKey] = useState<string | null>(null);
 
   useEffect(() => {
     if (status === "loading") return;
@@ -40,7 +41,9 @@ function SettingsContent() {
     const canceled = searchParams.get("canceled");
 
     if (success) {
-      toast.success("Subscription activated successfully! Credits have been added to your account.");
+      toast.success(
+        "Subscription activated successfully! Credits have been added to your account."
+      );
       // Clean URL
       router.replace("/settings");
     }
@@ -51,7 +54,20 @@ function SettingsContent() {
     }
 
     fetchUserData();
+    fetchStripeConfig();
   }, [session, status, router, searchParams]);
+
+  const fetchStripeConfig = async () => {
+    try {
+      const response = await fetch("/api/stripe/config");
+      if (response.ok) {
+        const data = await response.json();
+        setStripePublicKey(data.publicKey || null);
+      }
+    } catch (error) {
+      console.error("Error fetching Stripe config:", error);
+    }
+  };
 
   const fetchUserData = async () => {
     try {
@@ -71,8 +87,14 @@ function SettingsContent() {
   };
 
   const handleSubscribe = async (planType: "BASIC" | "PRO") => {
-    if (!STRIPE_PUBLIC_KEY) {
-      toast.error("Stripe is not configured. Please contact support.");
+    if (!stripePublicKey) {
+      toast.error(
+        "Stripe is not configured. Please add STRIPE_PUBLIC_KEY to your environment variables and redeploy.",
+        { duration: 6000 }
+      );
+      console.error(
+        "STRIPE_PUBLIC_KEY is missing. Please add it to Vercel environment variables."
+      );
       return;
     }
 
@@ -127,7 +149,9 @@ function SettingsContent() {
     } catch (error: unknown) {
       console.error("Portal error:", error);
       const errorMessage =
-        error instanceof Error ? error.message : "Failed to open billing portal";
+        error instanceof Error
+          ? error.message
+          : "Failed to open billing portal";
       toast.error(errorMessage);
       setIsProcessing(false);
     }
@@ -144,9 +168,6 @@ function SettingsContent() {
   if (!session) {
     return null;
   }
-
-  const planCredits =
-    planType === "PRO" ? 20000 : planType === "BASIC" ? 10000 : 1000;
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -216,8 +237,9 @@ function SettingsContent() {
                 <p className="text-sm text-muted-foreground">
                   <strong className="text-foreground">Credit System:</strong>{" "}
                   Each PDF extraction costs <strong>100 credits</strong>. You
-                  currently have <strong>{credits.toLocaleString()} credits</strong>{" "}
-                  remaining, which allows for approximately{" "}
+                  currently have{" "}
+                  <strong>{credits.toLocaleString()} credits</strong> remaining,
+                  which allows for approximately{" "}
                   <strong>{Math.floor(credits / 100)} more extractions</strong>.
                 </p>
               </div>
@@ -366,9 +388,9 @@ function SettingsContent() {
                         Low Credits
                       </h4>
                       <p className="text-sm text-yellow-700 dark:text-yellow-300">
-                        You have {credits} credits remaining. You need at least 100
-                        credits to extract a PDF. Consider subscribing to a plan to
-                        get more credits.
+                        You have {credits} credits remaining. You need at least
+                        100 credits to extract a PDF. Consider subscribing to a
+                        plan to get more credits.
                       </p>
                     </div>
                   </div>
@@ -397,4 +419,3 @@ export default function SettingsPage() {
     </Suspense>
   );
 }
-
