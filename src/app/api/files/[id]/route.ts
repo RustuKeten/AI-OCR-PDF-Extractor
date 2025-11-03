@@ -1,0 +1,103 @@
+import { NextRequest, NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { reorderResumeData } from "@/utils/resumeOrder";
+import { ResumeData } from "@/types/resume";
+
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const session = await getServerSession(authOptions);
+
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const userId = session.user.id;
+    const { id } = await params;
+
+    const file = await prisma.file.findFirst({
+      where: {
+        id,
+        userId, // Ensure user can only access their own files
+      },
+      include: {
+        resumeData: true,
+      },
+    });
+
+    if (!file) {
+      return NextResponse.json({ error: "File not found" }, { status: 404 });
+    }
+
+    // Reorder resume data if it exists
+    let resumeData: ResumeData | null = null;
+    if (file.resumeData?.data) {
+      resumeData = reorderResumeData(file.resumeData.data as unknown as ResumeData);
+    }
+
+    return NextResponse.json({
+      success: true,
+      file: {
+        id: file.id,
+        fileName: file.fileName,
+        fileSize: file.fileSize,
+        status: file.status,
+        uploadedAt: file.uploadedAt.toISOString(),
+        resumeData: resumeData,
+      },
+    });
+  } catch (error: unknown) {
+    console.error("Fetch file error:", error);
+    const errorMessage =
+      error instanceof Error ? error.message : "Internal server error";
+    return NextResponse.json({ error: errorMessage }, { status: 500 });
+  }
+}
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const session = await getServerSession(authOptions);
+
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const userId = session.user.id;
+    const { id } = await params;
+
+    // Verify the file belongs to the user
+    const file = await prisma.file.findFirst({
+      where: {
+        id,
+        userId,
+      },
+    });
+
+    if (!file) {
+      return NextResponse.json({ error: "File not found" }, { status: 404 });
+    }
+
+    // Delete the file record (Cascade will automatically delete related ResumeData and ResumeHistory)
+    await prisma.file.delete({
+      where: { id },
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: "File deleted successfully",
+    });
+  } catch (error: unknown) {
+    console.error("Delete file error:", error);
+    const errorMessage =
+      error instanceof Error ? error.message : "Internal server error";
+    return NextResponse.json({ error: errorMessage }, { status: 500 });
+  }
+}
+

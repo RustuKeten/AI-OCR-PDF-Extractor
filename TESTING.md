@@ -19,7 +19,7 @@
 Test if the endpoint is accessible:
 
 ```bash
-curl http://localhost:3000/api/extract
+curl http://localhost:3002/api/extract
 ```
 
 This will return information about the API endpoint and verify if your `OPENAI_API_KEY` is set.
@@ -50,7 +50,7 @@ The test script will:
 You can also test manually with cURL:
 
 ```bash
-curl -X POST http://localhost:3000/api/extract \
+curl -X POST http://localhost:3002/api/extract \
   -F "file=@/path/to/your/resume.pdf" \
   -H "Content-Type: multipart/form-data"
 ```
@@ -58,7 +58,7 @@ curl -X POST http://localhost:3000/api/extract \
 ### Option 4: Test from Browser
 
 1. Start the dev server: `npm run dev`
-2. Open `http://localhost:3000` in your browser
+2. Open `http://localhost:3002` in your browser
 3. Use the PDF uploader component on the homepage
 4. Upload a PDF file and see the results
 

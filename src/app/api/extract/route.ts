@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import OpenAI from "openai";
 import { ResumeData } from "@/types/resume";
 import { createEmptyResumeTemplate } from "@/utils/resumeTemplate";
+import { reorderResumeData } from "@/utils/resumeOrder";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -79,9 +80,12 @@ export async function POST(req: Request) {
       ],
     });
 
-    const jsonResult = JSON.parse(
+    let jsonResult = JSON.parse(
       completion.choices[0].message.content || "{}"
     ) as ResumeData;
+
+    // Reorder the data to match schema order (profile first, then workExperiences, etc.)
+    jsonResult = reorderResumeData(jsonResult);
 
     return NextResponse.json(jsonResult);
   } catch (err: unknown) {
