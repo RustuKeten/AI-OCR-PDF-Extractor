@@ -1,3 +1,6 @@
+// CRITICAL: DOMMatrix polyfill must be imported BEFORE any pdf-parse imports
+import "@/lib/dom-matrix-polyfill";
+
 import { NextResponse } from "next/server";
 import { ResumeData } from "@/types/resume";
 import { createEmptyResumeTemplate } from "@/utils/resumeTemplate";

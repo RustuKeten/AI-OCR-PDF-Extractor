@@ -7,29 +7,19 @@ import { ResumeData } from "@/types/resume";
 import { createEmptyResumeTemplate } from "@/utils/resumeTemplate";
 import { reorderResumeData } from "@/utils/resumeOrder";
 import { getOpenAI } from "@/lib/openai";
-
-let pdfParse: any;
-
-async function initPdfParse() {
-  if (!pdfParse) {
-    const pdfParseModule = await import("pdf-parse");
-    // PDFParse is exported as a named export, not default
-    pdfParse = (pdfParseModule as any).PDFParse;
-    if (!pdfParse || typeof pdfParse !== "function") {
-      throw new Error("PDFParse class not found in pdf-parse module");
-    }
-  }
-  return pdfParse;
-}
+import { promises as fs } from "fs";
+import { v4 as uuidv4 } from "uuid";
+import PDFParser from "pdf2json";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 const CREDITS_REQUIRED = 100;
 
 export async function POST(req: Request) {
-  let fileRecord: { id: string; fileName: string; fileSize: number } | null = null;
+  let fileRecord: { id: string; fileName: string; fileSize: number } | null =
+    null;
   let userId: string | undefined = undefined;
-  
+
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.email || !session.user.id) {
@@ -93,17 +83,14 @@ export async function POST(req: Request) {
       },
     });
 
-    // --- Extract text from PDF using pdf-parse (works on Vercel) ---
+    // --- Extract text from PDF using pdf2json (matches PDF-Scraper-App) ---
     console.log(
       `[Upload] Starting PDF text extraction for file: ${file.name} (${file.size} bytes)`
     );
-    
-    const PDFParse = await initPdfParse();
-    const pdfParser = new PDFParse({ data: buffer });
-    const pdfData = await pdfParser.getText();
-    let extractedText = pdfData.text?.trim() || "";
+
+    const extractedText = await extractTextFromPDF(buffer);
     let isImageBased = false;
-    
+
     console.log(
       `[Upload] PDF text extraction complete. Extracted ${extractedText.length} characters`
     );
@@ -279,7 +266,7 @@ IMPORTANT: Do not return empty strings or empty arrays unless the information is
     console.error("[Upload] Processing error:", error);
     const message =
       error instanceof Error ? error.message : "Unknown error occurred";
-    
+
     // Update file status to failed if fileRecord was created
     try {
       if (fileRecord?.id && userId) {
@@ -287,7 +274,7 @@ IMPORTANT: Do not return empty strings or empty arrays unless the information is
           where: { id: fileRecord.id },
           data: { status: "failed" },
         });
-        
+
         await prisma.resumeHistory.create({
           data: {
             userId,
@@ -301,14 +288,106 @@ IMPORTANT: Do not return empty strings or empty arrays unless the information is
     } catch (updateError) {
       console.error("[Upload] Failed to update file status:", updateError);
     }
-    
+
     return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+/**
+ * Extract text from PDF using pdf2json (matches PDF-Scraper-App implementation)
+ * This is the working text extraction method from PDF-Scraper-App
+ */
+async function extractTextFromPDF(buffer: Buffer): Promise<string> {
+  // Use pdf2json for text extraction (migrated from working PDF-Scraper-App)
+  const fileName = uuidv4();
+  const tempFilePath = `/tmp/${fileName}.pdf`;
+
+  console.log(
+    `[PDF Extraction] Starting extraction with pdf2json. Buffer size: ${buffer.length} bytes, temp file: ${tempFilePath}`
+  );
+  try {
+    // Write buffer to temporary file (required by pdf2json)
+    await fs.writeFile(tempFilePath, buffer);
+    console.log(`[PDF Extraction] Temporary file created: ${tempFilePath}`);
+
+    // Create PDFParser instance
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const pdfParser = new (PDFParser as any)(null, 1);
+
+    // Use Promise-based approach with event handlers and timeout
+    const parsedText = await Promise.race([
+      new Promise<string>((resolve, reject) => {
+        let resolved = false;
+
+        pdfParser.on("pdfParser_dataError", (errData: unknown) => {
+          const errorData = errData as { parserError?: string };
+          if (!resolved) {
+            resolved = true;
+            reject(new Error(errorData?.parserError || "PDF parsing error"));
+          }
+        });
+
+        pdfParser.on("pdfParser_dataReady", () => {
+          if (!resolved) {
+            resolved = true;
+            try {
+              // getRawTextContent() can throw RangeError with Infinity for malformed PDFs
+              const textContent = pdfParser.getRawTextContent() || "";
+              resolve(textContent.trim());
+            } catch (error) {
+              // If getRawTextContent() throws, resolve with empty string to trigger OCR fallback
+              console.warn(
+                "[PDF Extraction] getRawTextContent() failed, will trigger OCR fallback:",
+                error
+              );
+              resolve("");
+            }
+          }
+        });
+
+        pdfParser.loadPDF(tempFilePath);
+      }),
+      // Timeout after 30 seconds to prevent hanging
+      new Promise<string>((_, reject) => {
+        setTimeout(() => {
+          reject(new Error("PDF parsing timeout after 30 seconds"));
+        }, 30000);
+      }),
+    ]);
+
+    // Clean up temp file
+    try {
+      await fs.unlink(tempFilePath);
+    } catch (unlinkError) {
+      console.warn("[PDF Extraction] Failed to delete temp file:", unlinkError);
+    }
+
+    console.log(`[PDF Extraction] Extracted ${parsedText.length} characters`);
+    return parsedText;
+  } catch (error) {
+    // Clean up temp file on error
+    try {
+      await fs.unlink(tempFilePath);
+    } catch (unlinkError) {
+      console.warn("[PDF Extraction] Failed to delete temp file:", unlinkError);
+    }
+
+    console.error("[PDF Extraction] Error:", error);
+    throw new Error(
+      `Failed to extract text from PDF: ${
+        error instanceof Error ? error.message : "Unknown error"
+      }`
+    );
   }
 }
 
 async function extractImagesAsBase64(buffer: Buffer): Promise<string> {
   // Use pdf-parse's getScreenshot method (works in Vercel serverless)
-  const PDFParse = await initPdfParse();
+  // CRITICAL: DOMMatrix polyfill must be loaded before pdf-parse
+  await import("@/lib/dom-matrix-polyfill");
+
+  const pdfParseModule = await import("pdf-parse");
+  const PDFParse = (pdfParseModule as any).PDFParse;
   const pdfParser = new PDFParse({ data: buffer });
 
   const screenshotResult = await pdfParser.getScreenshot({
